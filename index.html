@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Phases">
 <meta name="theme-color" content="#F4F3F6">
 <link rel="apple-touch-icon" href="icon.png">
+<link rel="manifest" href="manifest.webmanifest">
 <title>Phases</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
@@ -79,8 +80,8 @@
   /* ---------- Day sheet ---------- */
   .day-sheet h2{font-size:18px; margin:0 0 12px;}
   .row-toggle{display:flex; align-items:center; justify-content:space-between; padding:4px 0 12px;}
-  .row-toggle label{font-weight:600; font-size:15px;}
-  .switch{position:relative; width:50px; height:30px;}
+  .row-toggle > label:not(.switch){font-weight:600; font-size:15px;}
+  .switch{position:relative; width:50px; height:30px; flex:0 0 auto; display:inline-block; cursor:pointer; -webkit-tap-highlight-color:transparent;}
   .switch input{opacity:0; width:0; height:0;}
   .slider{position:absolute; inset:0; background:#D8D4E0; border-radius:30px; transition:.18s;}
   .slider::before{content:""; position:absolute; width:24px; height:24px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.18s; box-shadow:0 1px 3px rgba(0,0,0,.2);}
@@ -203,7 +204,7 @@
   <h2 id="sheetTitle">Day</h2>
   <div class="row-toggle">
     <label for="periodToggle">Period day</label>
-    <span class="switch"><input type="checkbox" id="periodToggle"><span class="slider"></span></span>
+    <label class="switch"><input type="checkbox" id="periodToggle"><span class="slider"></span></label>
   </div>
   <div id="flowBlock" style="display:none">
     <div class="field-label">Flow</div>
@@ -255,7 +256,7 @@
     <div class="field-label" style="margin-top:0">Pregnancy mode</div>
     <div class="row-toggle" style="padding-bottom:6px">
       <label for="pregToggle" style="font-weight:500; font-size:14.5px">Pause cycle tracking<br><small style="color:var(--muted); font-weight:400">Predictions and alerts stop; a week counter takes over</small></label>
-      <span class="switch"><input type="checkbox" id="pregToggle"><span class="slider"></span></span>
+      <label class="switch"><input type="checkbox" id="pregToggle"><span class="slider"></span></label>
     </div>
     <div id="pregDueWrap" style="display:none">
       <div class="field-label">Due date</div>
@@ -271,16 +272,16 @@
     </div>
     <div class="row-toggle" style="padding:14px 0 2px">
       <label for="irregToggle" style="font-weight:500; font-size:14.5px">Irregular cycles (PCOS-friendly)<br><small style="color:var(--muted); font-weight:400">Sturdier predictions, no nagging about cycle length</small></label>
-      <span class="switch"><input type="checkbox" id="irregToggle"><span class="slider"></span></span>
+      <label class="switch"><input type="checkbox" id="irregToggle"><span class="slider"></span></label>
     </div>
     <div class="field-label">Notifications</div>
     <div class="row-toggle" style="padding-bottom:6px">
       <label for="notifyPhases" style="font-weight:500; font-size:14.5px">Alert when a new phase begins<br><small style="color:var(--muted); font-weight:400">9:00 AM alert on Calendar events</small></label>
-      <span class="switch"><input type="checkbox" id="notifyPhases"><span class="slider"></span></span>
+      <label class="switch"><input type="checkbox" id="notifyPhases"><span class="slider"></span></label>
     </div>
     <div class="row-toggle" style="padding-bottom:2px">
       <label for="notifyDayBefore" style="font-weight:500; font-size:14.5px">Evening heads-up before period<br><small style="color:var(--muted); font-weight:400">6:00 PM the day before it's expected</small></label>
-      <span class="switch"><input type="checkbox" id="notifyDayBefore"><span class="slider"></span></span>
+      <label class="switch"><input type="checkbox" id="notifyDayBefore"><span class="slider"></span></label>
     </div>
     <p class="hint" style="margin-top:4px">Alerts arrive through the iPhone Calendar app — turn these on, then tap "Add upcoming cycles to Calendar" below to activate them.</p>
     <div class="field-label">iPhone Calendar sync</div>
@@ -960,11 +961,7 @@
       lines.push("Notes:");
       ins.patterns.concat(ins.flags).forEach(function(t){ lines.push("  - " + t); });
     }
-    var blob = new Blob([lines.join("\n")], {type:"text/plain;charset=utf-8"});
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "cycle-history-" + iso(t0) + ".txt";
-    document.body.appendChild(a); a.click(); a.remove();
+    saveFile("cycle-history-" + iso(t0) + ".txt", "text/plain;charset=utf-8", lines.join("\n"));
   });
 
   /* ---------- events ---------- */
@@ -1041,6 +1038,27 @@
   document.getElementById("periodMinus").addEventListener("click", function(){ data.settings.periodLen = Math.max(1, data.settings.periodLen-1); save(); renderSettings(); });
   document.getElementById("periodPlus").addEventListener("click", function(){ data.settings.periodLen = Math.min(10, data.settings.periodLen+1); save(); renderSettings(); });
 
+  /* Hand a generated file to the phone. In a home-screen (standalone) app on
+     iOS a plain download link is silently ignored, so try the share sheet
+     first and fall back to the link everywhere else. */
+  function saveFile(name, mime, text){
+    var blob = new Blob([text], {type:mime});
+    try{
+      var file = new File([blob], name, {type:mime});
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        navigator.share({files:[file], title:name}).catch(function(){ downloadBlob(blob, name); });
+        return;
+      }
+    }catch(err){ /* File or canShare unavailable — use the link */ }
+    downloadBlob(blob, name);
+  }
+  function downloadBlob(blob, name){
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = name; a.rel = "noopener";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 10000);
+  }
   /* ---------- iPhone Calendar sync (.ics export) ---------- */
   function icsDate(d){ return d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0"); }
   function icsEvent(uid, title, start, endInclusive, desc, alarms){
@@ -1104,19 +1122,13 @@
     }
     var ics = buildIcs(model);
     if(!ics){ alert("No upcoming events to add yet."); return; }
-    var blob = new Blob([ics], {type:"text/calendar;charset=utf-8"});
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "phases-cycles.ics";
-    document.body.appendChild(a); a.click(); a.remove();
+    saveFile("phases-cycles.ics", "text/calendar;charset=utf-8", ics);
+
   });
 
   document.getElementById("exportBtn").addEventListener("click", function(){
-    var blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "phases-backup-" + iso(todayDate()) + ".json";
-    document.body.appendChild(a); a.click(); a.remove();
+    saveFile("phases-backup-" + iso(todayDate()) + ".json", "application/json", JSON.stringify(data, null, 2));
+
   });
   document.getElementById("importBtn").addEventListener("click", function(){ document.getElementById("importFile").click(); });
   document.getElementById("importFile").addEventListener("change", function(e){
@@ -1160,6 +1172,14 @@
   initialLoad = false;
   checkPhaseChange();
 })();
+</script>
+<script>
+/* Register the offline worker so the home-screen app opens with no signal. */
+if("serviceWorker" in navigator){
+  window.addEventListener("load", function(){
+    navigator.serviceWorker.register("sw.js").catch(function(){ /* offline is a bonus, not a requirement */ });
+  });
+}
 </script>
 </body>
 </html>
